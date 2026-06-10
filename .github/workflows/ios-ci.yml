@@ -7,51 +7,21 @@ on:
     branches: [ main, master ]
 
 jobs:
-  swift-test:
-    name: Swift Package Tests (macOS)
-    runs-on: macos-15
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app
-
-      - name: Resolve dependencies
-        run: swift package resolve
-
-      - name: Build
-        run: swift build -v
-
-      - name: Run tests
-        run: swift test -v
-
+  # Xcode build + test (macOS, uses xcodeproj + Herald scheme which has test targets)
+  # SPM Linux build+test is in unit_tests.yml
   xcodebuild:
-    name: Xcode Build (iOS Simulator)
-    runs-on: macos-15
+    name: Xcode Build + Test (iOS Simulator)
+    runs-on: macos-14
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app
-
-      - name: Build for simulator
+      - name: Build and Test
         run: |
-          xcodebuild build \
-            -scheme Herald-for-iOS \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+          xcodebuild clean test \
             -project Herald-for-iOS.xcodeproj \
+            -scheme Herald \
+            -destination 'platform=iOS Simulator,OS=17.2,name=iPhone 15' \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            | xcpretty || true
-
-      - name: Run tests on simulator
-        run: |
-          xcodebuild test \
-            -scheme Herald-for-iOS \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
-            -project Herald-for-iOS.xcodeproj \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            | xcpretty || true
+            ONLY_ACTIVE_ARCH=NO
