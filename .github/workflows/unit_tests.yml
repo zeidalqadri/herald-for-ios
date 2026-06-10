@@ -33,18 +33,14 @@ jobs:
         env:
           destination: ${{ matrix.destination }}
 
-  # SPM build + test (works on Linux too — verifies cross-platform)
+  # SPM build + test (Linux only — LinuxStubs.swift provides Herald type stubs; macOS uses Xcode)
   spm_tests:
-    name: SPM Build + Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-22.04, macos-14]
+    name: SPM Build + Test (ubuntu-22.04)
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Swift (Linux)
-        if: runner.os == 'Linux'
         uses: swift-actions/setup-swift@v2
         with:
           swift-version: '5.9'
