@@ -1,35 +1,39 @@
 // swift-tools-version:5.9
-// The swift-tools-version declares the minimum version of Swift required to build this package.
+//
+// SPM manifest for cross-platform MeshKit compilation and testing.
+// The full Herald library (which requires CoreBluetooth) builds via the .xcodeproj on macOS/iOS.
+// This Package.swift enables: swift build && swift test on Linux + macOS.
 
 import PackageDescription
 
 let package = Package(
     name: "Herald",
     platforms: [
-        .iOS(.v14)
+        .iOS(.v14),
+        .macOS(.v12)
     ],
     products: [
-        .library(
-            name: "Herald",
-            targets: [
-                "Herald"
-            ]
-        )
+        .library(name: "MeshKit", targets: ["MeshKit"])
+    ],
+    dependencies: [
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0")
     ],
     targets: [
         .target(
-            name: "Herald",
-            path: "Herald/Herald"
+            name: "MeshKit",
+            dependencies: [
+                .product(name: "Crypto", package: "swift-crypto",
+                         condition: .when(platforms: [.linux])),
+                .product(name: "_CryptoExtras", package: "swift-crypto",
+                         condition: .when(platforms: [.linux]))
+            ],
+            path: "Herald/Herald/MeshKit"
         ),
         .testTarget(
-            name: "HeraldTests",
-            dependencies: [
-                "Herald"
-            ],
-            path: "Herald/HeraldTests"
+            name: "MeshKitTests",
+            dependencies: ["MeshKit"],
+            path: "Herald/HeraldTests/MeshKit"
         )
     ],
-    swiftLanguageVersions: [
-        .v5, .version("5.9")
-    ]
+    swiftLanguageVersions: [.v5]
 )

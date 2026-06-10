@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import Herald
+@testable import MeshKit
 
 class MockContactDelegate: MeshKitContactDelegate {
     var receivedContacts: [MeshKitContact] = []

@@ -6,7 +6,12 @@
 //
 
 import Foundation
+#if canImport(CommonCrypto)
 import CommonCrypto
+#else
+import Crypto
+import _CryptoExtras
+#endif
 
 /// MeshKit payload data supplier. Bridges Herald BLE transport with MeshKit identity.
 ///
@@ -91,10 +96,14 @@ public class MeshKitPayloadSupplier: PayloadDataSupplier {
 
     private func encryptedPayload(_ timestamp: PayloadTimestamp, key: Data) -> PayloadData? {
         var nonce = Data(count: 12)
+        #if canImport(CommonCrypto)
         let result = nonce.withUnsafeMutableBytes {
             SecRandomCopyBytes(kSecRandomDefault, 12, $0.baseAddress!)
         }
         guard result == errSecSuccess else { return nil }
+        #else
+        nonce = Data((0..<12).map { _ in UInt8.random(in: 0...255) })
+        #endif
 
         let plaintext = withUnsafeBytes(of: nodeId.uuid) { Data($0) }
         guard let ciphertext = Self.aesCTRCrypt(data: plaintext, key: key, nonce: nonce) else { return nil }
@@ -118,7 +127,7 @@ public class MeshKitPayloadSupplier: PayloadDataSupplier {
         let uuidBytes = payload.data.subdata(in: 1..<17)
         return uuidBytes.withUnsafeBytes { ptr -> UUID? in
             guard ptr.count == 16 else { return nil }
-            return UUID(uuid: ptr.load(as: uuid_t.self))
+            return UUID(uuid: ptr.loadUnaligned(as: uuid_t.self))
         }
     }
 
@@ -126,7 +135,7 @@ public class MeshKitPayloadSupplier: PayloadDataSupplier {
     public static func parseTimestamp(from payload: PayloadData) -> Date? {
         guard payload.count == payloadLengthV1 else { return nil }
         let tsData = payload.data.subdata(in: 17..<21)
-        let ts: UInt32 = tsData.withUnsafeBytes { $0.load(as: UInt32.self) }
+        let ts: UInt32 = tsData.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
         return Date(timeIntervalSince1970: TimeInterval(ts))
     }
 
@@ -147,7 +156,7 @@ public class MeshKitPayloadSupplier: PayloadDataSupplier {
             guard let plaintext = Self.aesCTRCrypt(data: ciphertext, key: key, nonce: nonce) else { return nil }
             return plaintext.withUnsafeBytes { ptr -> UUID? in
                 guard ptr.count == 16 else { return nil }
-                return UUID(uuid: ptr.load(as: uuid_t.self))
+                return UUID(uuid: ptr.loadUnaligned(as: uuid_t.self))
             }
         }
         return nil
@@ -163,7 +172,7 @@ public class MeshKitPayloadSupplier: PayloadDataSupplier {
         } else if ver == Self.versionV2 {
             guard payload.count == Self.payloadLengthV2 else { return nil }
             let tsData = payload.data.subdata(in: 29..<33)
-            let ts: UInt32 = tsData.withUnsafeBytes { $0.load(as: UInt32.self) }
+            let ts: UInt32 = tsData.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
             return Date(timeIntervalSince1970: TimeInterval(ts))
         }
         return nil
@@ -174,6 +183,8 @@ public class MeshKitPayloadSupplier: PayloadDataSupplier {
     /// AES-128 CTR encrypt/decrypt (symmetric operation). IV = nonce(12) || 0x00000000(4).
     static func aesCTRCrypt(data input: Data, key: Data, nonce: Data) -> Data? {
         guard key.count == 16, nonce.count == 12 else { return nil }
+
+        #if canImport(CommonCrypto)
         let ivBytes = [UInt8](nonce) + [UInt8](repeating: 0, count: 4)
         let keyBytes = [UInt8](key)
         let inputBytes = [UInt8](input)
@@ -196,5 +207,16 @@ public class MeshKitPayloadSupplier: PayloadDataSupplier {
         CCCryptorRelease(ref)
         guard status == kCCSuccess else { return nil }
         return Data(output.prefix(outputLen))
+        #else
+        // swift-crypto: AES-CTR via Crypto module
+        do {
+            let symmetricKey = SymmetricKey(data: key)
+            let iv = try AES._CTR.Nonce(nonceBytes: nonce + Data(repeating: 0, count: 4))
+            let encrypted = try AES._CTR.encrypt(input, using: symmetricKey, nonce: iv)
+            return Data(encrypted)
+        } catch {
+            return nil
+        }
+        #endif
     }
 }

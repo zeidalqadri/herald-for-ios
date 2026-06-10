@@ -1,34 +1,56 @@
 name: Unit Tests
 
-# READ THIS BEFORE MODIFYING: https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
-# And this: https://nathandavison.com/blog/github-actions-and-the-threat-of-malicious-pull-requests
-
-# WARNING ONLY EVER USE A GITHUB_TOKEN THAT HAS **ONLY** READ_REPO ACCESS
-# (Because we invoke the local gradlew command for reproducibility)
-
-# read-only repo token
-# no access to secrets
 on:
+  push:
+    branches:
+      - meshkit/fixes
   pull_request:
     branches:
-      - develop # PRs from external developers or project team
-      - main    # PRs for triggering a release
+      - develop
+      - main
 
 jobs:
-  unit_tests:
-    name: Swift Build and Test for ${{ matrix.destination }}
-    runs-on: [macos-latest]
+  # Full Xcode build + test (macOS runner, uses xcodeproj)
+  xcode_tests:
+    name: Xcode Build (${{ matrix.destination }})
+    runs-on: macos-14
     strategy:
       matrix:
-        destination: [
-          'platform=iOS Simulator,OS=16.2,name=iPhone 11 Pro'
-        ]
-
+        destination:
+          - 'platform=iOS Simulator,OS=17.2,name=iPhone 15'
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+
+      - name: Build and Test
+        run: |
+          xcodebuild clean test \
+            -project Herald-for-iOS.xcodeproj \
+            -scheme Herald \
+            -destination "${destination}" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            ONLY_ACTIVE_ARCH=NO
+        env:
+          destination: ${{ matrix.destination }}
+
+  # SPM build + test (works on Linux too — verifies cross-platform)
+  spm_tests:
+    name: SPM Build + Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, macos-14]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Swift (Linux)
+        if: runner.os == 'Linux'
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '5.9'
 
       - name: Build
-        run: |
-          xcodebuild clean test -project Herald-for-iOS.xcodeproj -scheme Herald -destination "${destination}" CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO ONLY_ACTIVE_ARCH=NO
-        env: 
-          destination: ${{ matrix.destination }}
+        run: swift build
+
+      - name: Test
+        run: swift test
