@@ -17,8 +17,10 @@ public protocol MeshKitContactDelegate: AnyObject {
 public class MeshKitSensorDelegate: SensorDelegate {
     private let payloadSupplier: MeshKitPayloadSupplier
     public weak var contactDelegate: MeshKitContactDelegate?
+    public var queue: MeshKitQueue?
+    public weak var deliveryDelegate: MeshKitDeliveryDelegate?
     private var contacts: [MeshKitContact] = []
-    private let queue = DispatchQueue(label: "io.meshkit.contacts")
+    private let contactsQueue = DispatchQueue(label: "io.meshkit.contacts")
 
     public init(payloadSupplier: MeshKitPayloadSupplier) {
         self.payloadSupplier = payloadSupplier
@@ -44,17 +46,17 @@ public class MeshKitSensorDelegate: SensorDelegate {
 
     /// Thread-safe snapshot of all detected contacts.
     public var contactLog: [MeshKitContact] {
-        queue.sync { contacts }
+        contactsQueue.sync { contacts }
     }
 
     /// Number of contacts detected.
     public var contactCount: Int {
-        queue.sync { contacts.count }
+        contactsQueue.sync { contacts.count }
     }
 
     /// Remove all contacts from the log.
     public func clearContacts() {
-        queue.sync { contacts.removeAll() }
+        contactsQueue.sync { contacts.removeAll() }
     }
 
     // MARK:- Internal
@@ -65,7 +67,14 @@ public class MeshKitSensorDelegate: SensorDelegate {
         guard nodeId != payloadSupplier.nodeId else { return }
         let timestamp = payloadSupplier.decryptTimestamp(from: payload) ?? Date()
         let contact = MeshKitContact(remoteNodeId: nodeId, rssi: rssi ?? 0.0, timestamp: timestamp)
-        queue.sync { contacts.append(contact) }
+        contactsQueue.sync { contacts.append(contact) }
         contactDelegate?.meshKit(didDetectContact: contact)
+        // Check queue for pending envelopes to deliver to this peer
+        if let meshQueue = self.queue, let delegate = self.deliveryDelegate {
+            let pending = meshQueue.peekForPeer(contact.remoteNodeId)
+            if !pending.isEmpty {
+                delegate.meshKit(shouldDeliver: pending, toPeer: contact.remoteNodeId)
+            }
+        }
     }
 }
