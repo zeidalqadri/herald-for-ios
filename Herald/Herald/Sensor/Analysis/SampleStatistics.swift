@@ -113,13 +113,14 @@ public class SampleStatistics {
 
         combined.m1 = (Double(n) * m1 + Double(sample.n) * sample.m1) / Double(combined.n)
         combined.m2 = m2 + sample.m2 + delta2 * Double(n * sample.n) / Double(combined.n)
-        combined.m3 = m3 + sample.m3
-                + delta3 * Double(n * sample.n * (n - sample.n)) / Double(combined.n * combined.n)
-        combined.m3 = combined.m3 + 3.0 * delta * (Double(n) * sample.m2 - Double(sample.n) * m2) / Double(combined.n)
-        combined.m4 = m4 + sample.m4 + delta4 * Double(n * sample.n
-                * (n * n - n * sample.n + sample.n * sample.n)) / Double(combined.n * combined.n * combined.n)
-        combined.m4 = combined.m4 + 6.0 * delta2 * (Double(n * n) * sample.m2 + Double(sample.n * sample.n) * m2)
-                / Double(combined.n * combined.n) + 4.0 * delta * (Double(n) * sample.m3 - Double(sample.n) * m3) / Double(combined.n)
+        // Broken into intermediate vars to fix Swift type-checker timeout (fixes #204)
+        let m3_base = m3 + sample.m3 + delta3 * Double(n * sample.n * (n - sample.n)) / Double(combined.n * combined.n)
+        let m3_correction = 3.0 * delta * (Double(n) * sample.m2 - Double(sample.n) * m2) / Double(combined.n)
+        combined.m3 = m3_base + m3_correction
+        let m4_base = m4 + sample.m4 + delta4 * Double(n * sample.n * (n * n - n * sample.n + sample.n * sample.n)) / Double(combined.n * combined.n * combined.n)
+        let m4_cross = 6.0 * delta2 * (Double(n * n) * sample.m2 + Double(sample.n * sample.n) * m2) / Double(combined.n * combined.n)
+        let m4_correction = 4.0 * delta * (Double(n) * sample.m3 - Double(sample.n) * m3) / Double(combined.n)
+        combined.m4 = m4_base + m4_cross + m4_correction
         combined.min = (min! < sample.min! ? min : sample.min)
         combined.max = (max! > sample.max! ? max : sample.max)
 

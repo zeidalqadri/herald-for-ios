@@ -1,4 +1,4 @@
-// swift-tools-version:5.3
+// swift-tools-version:5.9
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "Herald",
     platforms: [
-        .iOS(.v9)
+        .iOS(.v14)
     ],
     products: [
         .library(
@@ -30,6 +30,6 @@ let package = Package(
         )
     ],
     swiftLanguageVersions: [
-        .v5
+        .v5, .version("5.9")
     ]
 )

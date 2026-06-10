@@ -195,36 +195,45 @@ class ConcreteBLETransmitter : NSObject, BLETransmitter, CBPeripheralManagerDele
         queue.async {
             self.peripheral.stopAdvertising()
         }
-        notifyTimer?.cancel()
-        notifyTimer = nil
+        notifyTimerQueue.async { [weak self] in
+            self?.notifyTimer?.cancel()
+            self?.notifyTimer = nil
+        }
     }
     
     /// All work starts from notify subscribers loop.
     /// Generate updateValue notification after 8 seconds to notify all subscribers and keep the iOS receivers awake.
+    /// Synchronized on notifyTimerQueue to prevent race condition in timer lifecycle (fixes #190).
     private func notifySubscribers(_ source: String) {
-        guard transmitterEnabled else {
-            return
+        notifyTimerQueue.async { [weak self] in
+            guard let self = self, self.transmitterEnabled else { return }
+            self.notifyTimer?.cancel()
+            let timer = DispatchSource.makeTimerSource(queue: self.notifyTimerQueue)
+            timer.schedule(deadline: .now() + BLESensorConfiguration.notificationDelay)
+            timer.setEventHandler { [weak self] in
+                guard let s = self, let signalCharacteristic = s.signalCharacteristic else {
+                    return
+                }
+                // Notify subscribers to keep them awake
+                s.queue.async {
+                    s.logger.debug("notifySubscribers (source=\(source))")
+                    s.peripheral.updateValue(s.emptyData, for: signalCharacteristic, onSubscribedCentrals: nil)
+                }
+                // Restart advert if required
+                let advertUpTime = Date().timeIntervalSince(s.advertisingStartedAt)
+                if s.peripheral.isAdvertising, advertUpTime > BLESensorConfiguration.advertRestartTimeInterval {
+                    s.logger.debug("advertRestart (upTime=\(advertUpTime))")
+                    s.startAdvertising(withNewCharacteristics: true)
+                }
+            }
+            self.notifyTimer = timer
+            timer.resume()
         }
+    }
+
+    deinit {
         notifyTimer?.cancel()
-        notifyTimer = DispatchSource.makeTimerSource(queue: notifyTimerQueue)
-        notifyTimer?.schedule(deadline: DispatchTime.now() + BLESensorConfiguration.notificationDelay)
-        notifyTimer?.setEventHandler { [weak self] in
-            guard let s = self, let logger = self?.logger, let signalCharacteristic = self?.signalCharacteristic else {
-                return
-            }
-            // Notify subscribers to keep them awake
-            s.queue.async {
-                logger.debug("notifySubscribers (source=\(source))")
-                s.peripheral.updateValue(s.emptyData, for: signalCharacteristic, onSubscribedCentrals: nil)
-            }
-            // Restart advert if required
-            let advertUpTime = Date().timeIntervalSince(s.advertisingStartedAt)
-            if s.peripheral.isAdvertising, advertUpTime > BLESensorConfiguration.advertRestartTimeInterval {
-                logger.debug("advertRestart (upTime=\(advertUpTime))")
-                s.startAdvertising(withNewCharacteristics: true)
-            }
-        }
-        notifyTimer?.resume()
+        notifyTimer = nil
     }
     
     // MARK:- CBPeripheralManagerDelegate
