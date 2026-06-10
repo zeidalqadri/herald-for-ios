@@ -8,10 +8,6 @@ import PackageDescription
 
 let package = Package(
     name: "Herald",
-    platforms: [
-        .iOS(.v14),
-        .macOS(.v12)
-    ],
     products: [
         .library(name: "MeshKit", targets: ["MeshKit"])
     ],
@@ -22,6 +18,7 @@ let package = Package(
         .target(
             name: "MeshKit",
             dependencies: [
+                // Linux: AES-128-CTR via _CryptoExtras; LinuxStubs.swift provides Herald type stubs
                 .product(name: "Crypto", package: "swift-crypto",
                          condition: .when(platforms: [.linux])),
                 .product(name: "_CryptoExtras", package: "swift-crypto",
